@@ -1,0 +1,44 @@
+from pyspark.sql import functions as F
+from pyspark.sql.types import DateType, StringType, DoubleType
+
+def psi_calculate(df_esperado_final, df_atual, col_data):
+    """
+    Calcula o Population Stability Index (PSI) mantendo a interface original.
+    
+    Args:
+        df_esperado_final: DataFrame com as proporções esperadas (de referência)
+        df_atual: DataFrame com as proporções atuais
+        col_data: Nome da coluna de data
+        
+    Returns:
+        DataFrame com as colunas:
+        - col_data: Data convertida para DateType
+        - Variavel: Nome da variável (StringType)
+        - Classe: Nome da classe (StringType)
+        - psi_classe: Valor do PSI calculado (DoubleType)
+    """
+    return (
+        df_atual.alias("atual")
+        .join(
+            df_esperado_final.select(
+                "Classe", 
+                "Variavel", 
+                F.col("pct_faixa_esperado_ref").alias("expected_prop")
+            ).alias("esperado"),
+            on=['Classe', 'Variavel'],
+            how='left'
+        )
+        .select(
+            F.col(f"atual.{col_data}").cast(DateType()).alias(col_data),
+            F.col("atual.Variavel").cast(StringType()).alias('Variavel'),
+            F.col("atual.Classe").cast(StringType()).alias('Classe'),
+            F.round(
+                (F.col("atual.proporcao_classe") - F.col("esperado.expected_prop")) * 
+                F.log(
+                    (F.col("atual.proporcao_classe") + 1e-10) / 
+                    (F.col("esperado.expected_prop") + 1e-10)
+                ), 
+                4
+            ).cast(DoubleType()).alias('psi_classe')
+        )
+    )
